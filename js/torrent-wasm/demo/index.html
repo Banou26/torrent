@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>torrent-wasm smoke test</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      margin: 0;
+      padding: 16px;
+      background: #0f111a;
+      color: #d3d8ed;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    button { padding: 6px 12px; margin-right: 6px; }
+    pre {
+      background: #0a0c14;
+      padding: 12px;
+      border-radius: 6px;
+      max-height: 70vh;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .ok { color: #5af19f; }
+    .err { color: #ff7e7e; }
+    .info { color: #8db4ff; }
+    input { width: 70%; padding: 6px; background:#0a0c14; color:#d3d8ed; border:1px solid #2a2f45; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>torrent-wasm smoke test</h1>
+  <div>
+    <button id="boot">1. Boot WASM</button>
+    <button id="create" disabled>2. Create client</button>
+    <button id="addStub" disabled>3. Add magnet (stub host)</button>
+    <button id="close" disabled>4. Close client</button>
+  </div>
+  <p>
+    <label>Magnet:&nbsp;
+      <input id="magnet" value="magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&amp;dn=Big%20Buck%20Bunny" />
+    </label>
+  </p>
+  <pre id="log"></pre>
+
+  <script type="module">
+    const log = document.getElementById('log')
+    const print = (msg, kind = '') => {
+      const span = document.createElement('span')
+      span.className = kind
+      span.textContent = String(msg) + '\n'
+      log.appendChild(span)
+      log.scrollTop = log.scrollHeight
+    }
+
+    // A stub host that fails every connection cleanly. Lets us verify the
+    // bridge wiring without depending on an actual WebVPN backend. Replace
+    // with the @fkn/lib adapter for real swarms.
+    const stubHost = {
+      dialTcp: async (opts) => {
+        print(`stubHost.dialTcp(${opts.network} ${opts.address}:${opts.port}) → rejecting`, 'info')
+        throw new Error('stub host: no upstream networking configured')
+      },
+      listenTcp: async (opts) => {
+        print(`stubHost.listenTcp(${opts.network} ${opts.address}:${opts.port}) → returning idle listener`, 'info')
+        // Return a listener that never accepts.
+        return {
+          localAddress: opts.address || '127.0.0.1',
+          localFamily: opts.network === 'tcp6' ? 'IPv6' : 'IPv4',
+          localPort: opts.port || 6881,
+          accept: () => new Promise(() => {}),
+          close: async () => {},
+        }
+      },
+      bindUdp: async (opts) => {
+        print(`stubHost.bindUdp(${opts.network} ${opts.address}:${opts.port}) → returning idle socket`, 'info')
+        return {
+          localAddress: opts.address || '0.0.0.0',
+          localFamily: opts.network === 'udp6' ? 'IPv6' : 'IPv4',
+          localPort: opts.port || 6881,
+          dataReadableStream: new ReadableStream({ start() {} }),
+          send: async () => {},
+          close: async () => {},
+        }
+      },
+    }
+
+    let client = null
+
+    document.getElementById('boot').onclick = async () => {
+      try {
+        print('Loading torrent-wasm...', 'info')
+        const mod = await import('../build/index.js')
+        await mod.load({
+          wasm: '../wasm/torrent.wasm',
+          wasmExec: '../wasm/wasm_exec.js',
+          host: stubHost,
+        })
+        print('WASM booted. globalThis.__torrent installed.', 'ok')
+        print('peerId placeholder: typeof __torrent = ' + typeof globalThis.__torrent, 'info')
+        document.getElementById('create').disabled = false
+        window.__demoMod = mod
+      } catch (err) {
+        print('Boot failed: ' + (err.stack || err.message || err), 'err')
+      }
+    }
+
+    document.getElementById('create').onclick = async () => {
+      try {
+        const mod = window.__demoMod
+        print('Creating client (memory storage, default config)...', 'info')
+        client = await mod.createClient({
+          storage: 'memory',
+          // Without a real WebVPN backend, disable network-dependent features
+          // so torrent setup doesn't keep retrying and producing noise.
+          disableTrackers: true,
+          disableDht: true,
+          disableWebtorrent: true,
+          disableWebseeds: true,
+        })
+        print('Client created. peerId = ' + client.peerId, 'ok')
+        print('listenAddrs = ' + JSON.stringify(client.listenAddrs()), 'info')
+        document.getElementById('addStub').disabled = false
+        document.getElementById('close').disabled = false
+      } catch (err) {
+        print('Create failed: ' + (err.stack || err.message || err), 'err')
+      }
+    }
+
+    document.getElementById('addStub').onclick = async () => {
+      try {
+        const magnet = document.getElementById('magnet').value
+        print('Adding magnet: ' + magnet.slice(0, 80) + '...', 'info')
+        const t = await client.addMagnet(magnet)
+        print('Torrent handle. infoHash=' + t.infoHash + ' name=' + t.name, 'ok')
+        print('  stats=' + JSON.stringify(t.stats()), 'info')
+        window.__demoTorrent = t
+      } catch (err) {
+        print('Add failed: ' + (err.stack || err.message || err), 'err')
+      }
+    }
+
+    document.getElementById('close').onclick = async () => {
+      try {
+        print('Closing client...', 'info')
+        await client.close()
+        print('Client closed.', 'ok')
+      } catch (err) {
+        print('Close failed: ' + (err.stack || err.message || err), 'err')
+      }
+    }
+  </script>
+</body>
+</html>

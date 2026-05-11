@@ -1,0 +1,48 @@
+{
+  "name": "@anacrolix/torrent-wasm",
+  "version": "0.1.0",
+  "description": "anacrolix/torrent compiled to WebAssembly with a JS API. Tunnels all peer traffic through a pluggable host — defaults to FKN WebVPN.",
+  "type": "module",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "wasm/torrent.wasm",
+    "wasm/wasm_exec.js",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "import": "./build/index.js"
+    },
+    "./host-fkn": {
+      "types": "./build/host-fkn.d.ts",
+      "import": "./build/host-fkn.js"
+    },
+    "./host-fkn-polyfill": {
+      "types": "./build/host-fkn-polyfill.d.ts",
+      "import": "./build/host-fkn-polyfill.js"
+    },
+    "./wasm/torrent.wasm": "./wasm/torrent.wasm",
+    "./wasm/wasm_exec.js": "./wasm/wasm_exec.js"
+  },
+  "scripts": {
+    "build:wasm": "GOOS=js GOARCH=wasm CGO_ENABLED=0 go -C ../../ build -ldflags=\"-s -w\" -o ./js/torrent-wasm/wasm/torrent.wasm ./cmd/torrent-wasm && cp \"$(go env GOROOT)/lib/wasm/wasm_exec.js\" ./wasm/wasm_exec.js",
+    "build:ts": "tsc",
+    "build": "npm run build:wasm && npm run build:ts"
+  },
+  "devDependencies": {
+    "@fkn/lib": "^0.2.1",
+    "@types/node": "^20.12.12",
+    "typescript": "^5.5.0"
+  },
+  "peerDependencies": {
+    "@fkn/lib": "^0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@fkn/lib": {
+      "optional": true
+    }
+  }
+}

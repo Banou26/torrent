@@ -1,0 +1,6 @@
+node_modules/
+build/
+wasm/torrent.wasm
+wasm/wasm_exec.js
+*.log
+.DS_Store
