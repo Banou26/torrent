@@ -11,7 +11,7 @@ import {
   type TorrentStats,
 } from '@anacrolix/torrent';
 
-import { net, dgram, apiPromise } from '@fkn/lib';
+import { net, dgram } from '@fkn/lib';
 
 // Pre-built artifacts from the @anacrolix/torrent package. Vite resolves
 // the file: dependency to its dist/.
@@ -184,14 +184,11 @@ export const App = () => {
     };
   }, []);
 
-  // Boot the WASM client once. @fkn/lib's `net` / `dgram` tunnel through
-  // WebTransport to webvpn — but inside a Worker, so the Go scheduler
-  // and per-packet work stay off the main thread. `apiPromise` is the
-  // main-window-bound osra handle to the FKN iframe; osra deep-proxies
-  // it into the worker so Socket constructors there can call back
-  // through it transparently.
+  // Boot the WASM client once.
   useEffect(() => {
     (async () => {
+      // (probe disabled)
+
       try {
         pushLog('[main] calling createClient (worker mode)');
         setStatus({ kind: 'wasm-loading' });
@@ -201,7 +198,6 @@ export const App = () => {
           wasmExecUrl,
           net,
           dgram,
-          apiPromise,
           storage: memoryStorage(),
         });
         pushLog('[main] createClient returned, client id =', cl.id);

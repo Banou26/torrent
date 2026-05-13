@@ -28,6 +28,7 @@
 //   });
 
 import { expose } from 'osra';
+import { exposeApi } from '@fkn/lib';
 
 import { createBridge } from './bridge.js';
 import { loadWasm, type LoadOptions } from './wasm.js';
@@ -117,11 +118,11 @@ function startRuntime(
 export interface CreateClientOptions extends ClientOptions, LoadOptions {
   /**
    * If provided, the WASM client runs inside this Worker. The library
-   * ships `apiPromise` (and `storage`) to the worker via osra. The
-   * worker constructs @fkn/lib's net/dgram Sockets using the shipped
-   * apiPromise, so every webvpn call still routes back through the
-   * main window's iframe — but the Go scheduler runs off the main
-   * thread.
+   * uses @fkn/lib's `exposeApi({ transport: worker })` to re-expose the
+   * main thread's iframe-backed Resolvers over this Worker — the worker
+   * then calls `connectApi() + createFkn()` to construct its own
+   * net/dgram. The Go scheduler runs off the main thread; only the
+   * actual webvpn syscalls cross back.
    *
    * Spawn the worker yourself so you control its module type and base
    * URL, e.g.:
@@ -130,16 +131,6 @@ export interface CreateClientOptions extends ClientOptions, LoadOptions {
    *              { type: 'module' })
    */
   worker?: Worker;
-
-  /**
-   * @fkn/lib's apiPromise. Required in worker mode (the worker can't
-   * create its own iframe). Ignored in single-thread mode (where
-   * @fkn/lib's module-level apiPromise is used by the Socket
-   * constructors automatically). Get it via:
-   *
-   *   import { apiPromise } from '@fkn/lib';
-   */
-  apiPromise?: Promise<unknown>;
 }
 
 export async function createClient(opts: CreateClientOptions): Promise<Client> {
@@ -182,26 +173,23 @@ export async function createClient(opts: CreateClientOptions): Promise<Client> {
   return new Client(id, api);
 }
 
-// Worker handshake: we ship @fkn/lib's apiPromise (resolves to its
-// iframe-backed Resolvers) plus storage + wasm config. The worker
-// reconstructs net/dgram on its own side, parameterising every Socket
-// with the shipped apiPromise. osra deep-proxies the Resolvers object
-// transparently, so a `webVpnTcpSocket(...)` call inside the worker
-// transparently routes back to the main window's iframe.
+// Worker handshake: we expose `{ wasmUrl, storage, hasNet, hasDgram }`
+// to the worker for its bootstrap config, AND wire up @fkn/lib's own
+// bridge over the same Worker port via `exposeApi`. The worker pairs
+// our handshake with its own torrent forwarders, and pairs the @fkn
+// bridge with `connectApi() + createFkn()`. The two osra channels use
+// different keys so they don't collide on a single MessagePort.
 async function connectWorker(
   opts: CreateClientOptions,
   storage: StorageAdapter,
 ): Promise<WasmTorrentApi> {
-  if (!opts.apiPromise) {
-    throw new Error(
-      '@anacrolix/torrent: worker mode needs `apiPromise` — pass `apiPromise` from `import { apiPromise } from "@fkn/lib"`.',
-    );
-  }
+  // Re-expose the main thread's iframe-backed @fkn/lib api over the
+  // worker. Worker calls `connectApi({transport: self})` to receive it.
+  await exposeApi({ transport: opts.worker as unknown as Worker });
 
   const hostExports: Record<string, unknown> = {
     wasmUrl: opts.wasmUrl.toString(),
     storage,
-    apiPromise: opts.apiPromise,
     hasNet: opts.net !== undefined,
     hasDgram: opts.dgram !== undefined,
   };
@@ -215,7 +203,7 @@ async function connectWorker(
     transport: opts.worker as unknown as Worker,
     key: OSRA_KEY,
   })) as unknown as WasmTorrentApi;
-  log('[main] osra handshake done; remote api ready, typeof newClient =', typeof remote.newClient);
+  log('[main] osra handshake done; remote api ready');
   return remote;
 }
 

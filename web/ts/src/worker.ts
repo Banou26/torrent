@@ -1,59 +1,18 @@
 // Worker entry point for @anacrolix/torrent.
 //
 // Pair with createClient({ worker: new Worker(...) }) on the main thread.
-// Main ships its @fkn/lib `apiPromise` (resolving to the iframe-backed
-// Resolvers) into us via osra; we use it to construct net/dgram Socket
-// objects locally — those run in this worker, but every actual VPN
-// call routes through the apiPromise (and therefore back to the main
-// window's iframe + WebTransport to webvpn).
-//
-// Why ship the apiPromise instead of net/dgram objects? @fkn/lib's
-// Server/Socket classes have EventEmitter prototypes that don't survive
-// osra serialization. The apiPromise resolves to a plain Resolvers
-// object whose methods osra knows how to proxy, so it crosses fine.
-
-// Probe message BEFORE imports, so we know whether the script started
-// at all even if imports fail.
-try {
-  (self as DedicatedWorkerGlobalScope).postMessage({
-    __torrentWorkerLog: true,
-    args: ['[worker] script started, about to import'],
-  });
-} catch {}
-
-// Hook console.log so anything from inside @fkn/lib (or other deps) gets
-// forwarded to the main page along with our own logs.
-const origConsoleLog = console.log.bind(console);
-console.log = (...args: unknown[]) => {
-  origConsoleLog(...args);
-  try {
-    (self as DedicatedWorkerGlobalScope).postMessage({
-      __torrentWorkerLog: true,
-      args: args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : a)),
-    });
-  } catch {}
-};
+// Main calls @fkn/lib's `exposeApi({ transport: worker })` to re-expose
+// its iframe-backed Resolvers over this worker; we call `connectApi`
+// here and feed the result to `createFkn` to get net/dgram modules. The
+// Go scheduler then runs entirely inside this worker; only the actual
+// webvpn calls hop back to main and out to the iframe.
 
 import { expose } from 'osra';
-// @fkn/lib's dom.ts was patched to be safe to import without a window
-// (returns null instead of throwing); the apiPromise rejects in that
-// case, but we override it via constructor options below so it never
-// matters.
-import { net as fknNet, dgram as fknDgram } from '@fkn/lib';
+import { connectApi, createFkn } from '@fkn/lib';
 
 import { createBridge } from './bridge.js';
 import { loadWasm, type LoadOptions } from './wasm.js';
-import type {
-  NodeDgramModule,
-  NodeDgramSocket,
-  NodeNetModule,
-  NodeServer,
-  NodeSocket,
-  StorageAdapter,
-} from './types.js';
-
-// Resolvers is whatever @fkn/lib exposes — osra-proxied into the worker.
-type Resolvers = Record<string, (...args: unknown[]) => unknown>;
+import type { StorageAdapter } from './types.js';
 
 interface WasmTorrentApi {
   newClient(opts: object): Promise<{ id: number }>;
@@ -75,8 +34,6 @@ interface HostExports {
   argv?: string[];
   env?: Record<string, string>;
   storage: StorageAdapter;
-  /** osra-proxied apiPromise; resolves to main's @fkn/lib Resolvers. */
-  apiPromise: Promise<Resolvers>;
   hasNet: boolean;
   hasDgram: boolean;
 }
@@ -85,10 +42,11 @@ export const OSRA_KEY = 'anacrolix-torrent-worker';
 
 // Forward worker-side console.log to main so it lands in the page
 // console (DevTools-per-worker is awkward to open through the
-// automation plugin).
+// automation plugin). Hook console.log eagerly so anything from inside
+// @fkn/lib and its deps also surfaces.
 const log = (...args: unknown[]): void => {
   // eslint-disable-next-line no-console
-  console.log(...args);
+  origConsoleLog(...args);
   try {
     (self as DedicatedWorkerGlobalScope).postMessage({
       __torrentWorkerLog: true,
@@ -98,6 +56,8 @@ const log = (...args: unknown[]): void => {
     // Non-cloneable payload — drop.
   }
 };
+const origConsoleLog = console.log.bind(console);
+console.log = (...args: unknown[]) => log(...args);
 
 self.addEventListener('error', (e) => {
   log('[worker] error', e.message, e.filename, e.lineno, e.colno);
@@ -150,46 +110,20 @@ const workerExports = {
   },
 };
 
-// Build a NodeNetModule that constructs @fkn/lib Sockets/Servers
-// parameterised on the injected apiPromise. The bridge.ts code calls
-// `net.createConnection` / `net.createServer` — these factories pin
-// each instance to main's apiPromise so any internal `api['webVpn...']`
-// call routes back through osra → main → iframe → webvpn.
-function makeNetForApiPromise(apiPromise: Promise<Resolvers>): NodeNetModule {
-  return {
-    createConnection(opts) {
-      // @fkn/lib's Socket exposes the EventEmitter surface our bridge.ts
-      // expects, plus the `connect()` we trigger below to start the dial.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = new (fknNet as any).Socket({ apiPromise }) as NodeSocket & {
-        connect: (opts: { host: string; port: number }) => unknown;
-      };
-      s.connect({ host: opts.host, port: opts.port });
-      return s;
-    },
-    createServer() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return new (fknNet as any).Server({ apiPromise }) as NodeServer;
-    },
-  };
-}
-
-function makeDgramForApiPromise(apiPromise: Promise<Resolvers>): NodeDgramModule {
-  return {
-    createSocket(type) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return new (fknDgram as any).Socket({ type, apiPromise }) as NodeDgramSocket;
-    },
-  };
-}
-
 const boot = async (): Promise<void> => {
   log('[worker] awaiting osra handshake');
+  // Start the @fkn/lib bridge handshake concurrently with our own torrent
+  // RPC handshake. Both osra channels share the worker's MessagePort but
+  // use different keys (fkn's BRIDGE_KEY = 'fkn-api-bridge', ours OSRA_KEY)
+  // so they don't conflict.
+  const fknApiPromise = connectApi({ transport: self as unknown as Worker });
   const host = (await expose(workerExports, {
     transport: self,
     key: OSRA_KEY,
   })) as unknown as HostExports;
   log('[worker] osra handshake done; loading wasm');
+
+  const fkn = createFkn({ api: fknApiPromise });
 
   const loadOpts: LoadOptions = {
     wasmUrl: host.wasmUrl,
@@ -203,12 +137,16 @@ const boot = async (): Promise<void> => {
     signalReady = r;
   });
 
-  const bridge = createBridge({
-    ...(host.hasNet ? { net: makeNetForApiPromise(host.apiPromise) } : {}),
-    ...(host.hasDgram ? { dgram: makeDgramForApiPromise(host.apiPromise) } : {}),
+  type BridgeOpts = Parameters<typeof createBridge>[0];
+  const bridgeOpts: BridgeOpts = {
     storage: host.storage,
     onReady: () => signalReady(),
-  });
+  };
+  // @fkn/lib's net/dgram are Node-compatible at runtime; the structural
+  // type just doesn't line up with our minimal Node interface, so cast.
+  if (host.hasNet) bridgeOpts.net = fkn.net as unknown as NonNullable<BridgeOpts['net']>;
+  if (host.hasDgram) bridgeOpts.dgram = fkn.dgram as unknown as NonNullable<BridgeOpts['dgram']>;
+  const bridge = createBridge(bridgeOpts);
   (globalThis as { __torrentBridge?: object }).__torrentBridge = bridge;
 
   await loadWasm(loadOpts, readyPromise);
