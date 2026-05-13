@@ -1,0 +1,48 @@
+{
+  "name": "@anacrolix/torrent",
+  "version": "0.1.0-alpha.0",
+  "description": "Browser TypeScript wrapper around the anacrolix/torrent Go library compiled to WebAssembly.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./storage/memory": {
+      "types": "./dist/storage/memory.d.ts",
+      "import": "./dist/storage/memory.js"
+    },
+    "./storage/opfs": {
+      "types": "./dist/storage/opfs.d.ts",
+      "import": "./dist/storage/opfs.js"
+    },
+    "./wasm": "./dist/torrent.wasm",
+    "./wasm_exec": "./dist/wasm_exec.js"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build:wasm": "bash ../build-wasm.sh",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:wasm && npm run build:ts && cp ../dist/torrent.wasm ../dist/wasm_exec.js dist/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@fkn/lib": "*"
+  },
+  "peerDependenciesMeta": {
+    "@fkn/lib": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MPL-2.0"
+}

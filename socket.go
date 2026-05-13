@@ -28,6 +28,12 @@ type socket interface {
 	Close() error
 }
 
+// Socket aliases the internal socket interface. It is exported so that
+// out-of-tree builds (notably the GOOS=js GOARCH=wasm port under web/)
+// can supply alternative listener+dialer implementations via the
+// JsBridgeListenTcp / JsBridgeListenUtp hooks below.
+type Socket = socket
+
 func listen(n network, addr string, f firewallCallback, logger *slog.Logger) (socket, error) {
 	switch {
 	case n.Tcp:
@@ -45,6 +51,16 @@ func listen(n network, addr string, f firewallCallback, logger *slog.Logger) (so
 const dialTcpFromListenPort = false
 
 var SocketIPTypeOfService = 0
+
+// JsBridgeListenTcp, if set, is used instead of the default net.ListenConfig-based listener.
+// This allows the WASM build to provide a JS-backed TCP listener/dialer. See web/jsbridge.
+var JsBridgeListenTcp func(network, address string) (Socket, error)
+
+// JsBridgeListenUtp, if set, is used instead of the default uTP socket factory. The WASM build
+// uses this to provide a JS-backed UDP packet conn that the uTP layer rides on top of.
+// The firewallCallback is intentionally untyped here (any) so jsbridge can be implemented
+// in a separate package without depending on this package's unexported types.
+var JsBridgeListenUtp func(network, address string, logger *slog.Logger) (Socket, error)
 
 var tcpListenConfig = net.ListenConfig{
 	Control: func(network, address string, c syscall.RawConn) (err error) {
@@ -67,6 +83,13 @@ var tcpListenConfig = net.ListenConfig{
 }
 
 func listenTcp(network, address string) (s socket, err error) {
+	if JsBridgeListenTcp != nil {
+		return JsBridgeListenTcp(network, address)
+	}
+	return listenTcpStd(network, address)
+}
+
+func listenTcpStd(network, address string) (s socket, err error) {
 	l, err := tcpListenConfig.Listen(context.Background(), network, address)
 	if err != nil {
 		return
@@ -227,6 +250,12 @@ func listenAllRetry(
 type firewallCallback func(net.Addr) bool
 
 func listenUtp(network, addr string, fc firewallCallback, logger *slog.Logger) (socket, error) {
+	if JsBridgeListenUtp != nil {
+		// The firewall callback is currently ignored by the WASM bridge; the
+		// host is expected to perform any equivalent filtering itself.
+		_ = fc
+		return JsBridgeListenUtp(network, addr, logger)
+	}
 	us, err := NewUtpSocketSlogger(network, addr, fc, logger)
 	return utpSocketSocket{us, network}, err
 }
