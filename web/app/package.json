@@ -1,0 +1,23 @@
+{
+  "name": "@anacrolix/torrent-webapp",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@anacrolix/torrent": "file:../ts",
+    "@emotion/react": "^11.14.0",
+    "@fkn/lib": "file:../../../fkn/web/lib",
+    "preact": "^10.28.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "vite-plugin-node-polyfills": "^0.24.0"
+  }
+}

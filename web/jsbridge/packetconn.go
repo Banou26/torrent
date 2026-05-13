@@ -56,8 +56,20 @@ func ListenPacketJS(network, address string) (*JsPacketConn, error) {
 }
 
 func looksLikeUnsupportedAddr(msg string) bool {
-	for _, marker := range []string{"EADDRINUSE", "EADDRNOTAVAIL", "EAFNOSUPPORT"} {
-		if strings.Contains(msg, marker) {
+	low := strings.ToLower(msg)
+	for _, marker := range []string{
+		"eaddrinuse",
+		"eaddrnotavail",
+		"eafnosupport",
+		"address already in use",
+		"cannot assign requested address",
+		"address family not supported",
+		// Linux errno bare numbers seen from webvpn forwarding:
+		"os error 98",  // EADDRINUSE
+		"os error 99",  // EADDRNOTAVAIL
+		"os error 97",  // EAFNOSUPPORT
+	} {
+		if strings.Contains(low, marker) {
 			return true
 		}
 	}
