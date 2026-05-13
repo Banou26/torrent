@@ -1,21 +1,33 @@
 // Public TypeScript API for @anacrolix/torrent.
 //
-// Usage in a bundler-driven browser app:
+// Single-threaded mode (everything runs on the main thread — fine for
+// small/synthetic torrents, but the Go WASM scheduler will compete with
+// the UI for the JS event loop):
 //
 //   import { createClient } from '@anacrolix/torrent';
-//   import { opfsStorage } from '@anacrolix/torrent/storage/opfs';
 //   import * as fkn from '@fkn/lib';
 //
 //   const client = await createClient({
 //     wasmUrl: new URL('@anacrolix/torrent/wasm', import.meta.url),
-//     net: fkn.net,
-//     dgram: fkn.dgram,
-//     storage: await opfsStorage(),
+//     net: fkn.net, dgram: fkn.dgram,
 //   });
-//   const t = await client.addMagnet('magnet:?xt=urn:btih:...');
-//   const info = await t.gotInfo();
-//   const [file] = await t.files();
-//   const bytes = await file.read(0, 4096);
+//
+// Worker mode (recommended for anything real — the WASM and its socket
+// I/O move off the main thread; net/dgram modules and storage are
+// proxied to the worker via osra, so the same @fkn/lib instance keeps
+// the iframe-to-fkn-api connection on the main thread):
+//
+//   const worker = new Worker(
+//     new URL('@anacrolix/torrent/worker', import.meta.url),
+//     { type: 'module' },
+//   );
+//   const client = await createClient({
+//     worker,
+//     wasmUrl: new URL('@anacrolix/torrent/wasm', import.meta.url),
+//     net: fkn.net, dgram: fkn.dgram,
+//   });
+
+import { expose } from 'osra';
 
 import { createBridge } from './bridge.js';
 import { loadWasm, type LoadOptions } from './wasm.js';
@@ -46,7 +58,10 @@ export type {
   TorrentStats,
 } from './types.js';
 
-// Shape Go installs at globalThis.__torrent. Each method returns a Promise.
+// Shape that the WASM installs at globalThis.__torrent (single-threaded
+// mode) or that the worker re-exposes through osra (worker mode).
+// Identical signatures on both sides, so the Client/Torrent/File
+// classes don't care which they're talking to.
 interface WasmTorrentApi {
   newClient(opts: object): Promise<{ id: number }>;
   closeClient(id: number): Promise<void>;
@@ -68,6 +83,9 @@ declare global {
   var __torrentBridge: object | undefined;
 }
 
+// Must match the OSRA_KEY used by ./worker.ts.
+const OSRA_KEY = 'anacrolix-torrent-worker';
+
 let wasmReady: Promise<WasmTorrentApi> | null = null;
 
 function startRuntime(
@@ -78,7 +96,9 @@ function startRuntime(
 ): Promise<WasmTorrentApi> {
   if (wasmReady) return wasmReady;
   let signalReady!: () => void;
-  const readyPromise = new Promise<void>((r) => (signalReady = r));
+  const readyPromise = new Promise<void>((r) => {
+    signalReady = r;
+  });
   const bridge = createBridge({
     ...(net !== undefined ? { net } : {}),
     ...(dgram !== undefined ? { dgram } : {}),
@@ -94,7 +114,33 @@ function startRuntime(
   return wasmReady;
 }
 
-export interface CreateClientOptions extends ClientOptions, LoadOptions {}
+export interface CreateClientOptions extends ClientOptions, LoadOptions {
+  /**
+   * If provided, the WASM client runs inside this Worker. The library
+   * ships `apiPromise` (and `storage`) to the worker via osra. The
+   * worker constructs @fkn/lib's net/dgram Sockets using the shipped
+   * apiPromise, so every webvpn call still routes back through the
+   * main window's iframe — but the Go scheduler runs off the main
+   * thread.
+   *
+   * Spawn the worker yourself so you control its module type and base
+   * URL, e.g.:
+   *
+   *   new Worker(new URL('@anacrolix/torrent/worker', import.meta.url),
+   *              { type: 'module' })
+   */
+  worker?: Worker;
+
+  /**
+   * @fkn/lib's apiPromise. Required in worker mode (the worker can't
+   * create its own iframe). Ignored in single-thread mode (where
+   * @fkn/lib's module-level apiPromise is used by the Socket
+   * constructors automatically). Get it via:
+   *
+   *   import { apiPromise } from '@fkn/lib';
+   */
+  apiPromise?: Promise<unknown>;
+}
 
 export async function createClient(opts: CreateClientOptions): Promise<Client> {
   const storage = opts.storage ?? memoryStorage();
@@ -105,7 +151,9 @@ export async function createClient(opts: CreateClientOptions): Promise<Client> {
     );
   }
 
-  const api = await startRuntime(opts, opts.net, opts.dgram, storage);
+  const api: WasmTorrentApi = opts.worker
+    ? await connectWorker(opts, storage)
+    : await startRuntime(opts, opts.net, opts.dgram, storage);
 
   const clientOpts: Record<string, unknown> = {};
   for (const key of [
@@ -127,8 +175,48 @@ export async function createClient(opts: CreateClientOptions): Promise<Client> {
     clientOpts.disableDHT = true;
   }
 
+  const log = (globalThis as { __pushLog?: (...a: unknown[]) => void }).__pushLog ?? (() => {});
+  log('[main] calling api.newClient', JSON.stringify(clientOpts));
   const { id } = await api.newClient(clientOpts);
+  log('[main] newClient resolved, id =', id);
   return new Client(id, api);
+}
+
+// Worker handshake: we ship @fkn/lib's apiPromise (resolves to its
+// iframe-backed Resolvers) plus storage + wasm config. The worker
+// reconstructs net/dgram on its own side, parameterising every Socket
+// with the shipped apiPromise. osra deep-proxies the Resolvers object
+// transparently, so a `webVpnTcpSocket(...)` call inside the worker
+// transparently routes back to the main window's iframe.
+async function connectWorker(
+  opts: CreateClientOptions,
+  storage: StorageAdapter,
+): Promise<WasmTorrentApi> {
+  if (!opts.apiPromise) {
+    throw new Error(
+      '@anacrolix/torrent: worker mode needs `apiPromise` — pass `apiPromise` from `import { apiPromise } from "@fkn/lib"`.',
+    );
+  }
+
+  const hostExports: Record<string, unknown> = {
+    wasmUrl: opts.wasmUrl.toString(),
+    storage,
+    apiPromise: opts.apiPromise,
+    hasNet: opts.net !== undefined,
+    hasDgram: opts.dgram !== undefined,
+  };
+  if (opts.wasmExecUrl !== undefined) hostExports.wasmExecUrl = opts.wasmExecUrl.toString();
+  if (opts.argv !== undefined) hostExports.argv = opts.argv;
+  if (opts.env !== undefined) hostExports.env = opts.env;
+
+  const log = (globalThis as { __pushLog?: (...a: unknown[]) => void }).__pushLog ?? (() => {});
+  log('[main] starting osra handshake');
+  const remote = (await expose(hostExports, {
+    transport: opts.worker as unknown as Worker,
+    key: OSRA_KEY,
+  })) as unknown as WasmTorrentApi;
+  log('[main] osra handshake done; remote api ready, typeof newClient =', typeof remote.newClient);
+  return remote;
 }
 
 export class Client {

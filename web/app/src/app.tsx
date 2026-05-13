@@ -11,12 +11,57 @@ import {
   type TorrentStats,
 } from '@anacrolix/torrent';
 
-import { net, dgram } from '@fkn/lib';
+import { net, dgram, apiPromise } from '@fkn/lib';
 
 // Pre-built artifacts from the @anacrolix/torrent package. Vite resolves
 // the file: dependency to its dist/.
 const wasmUrl = new URL('@anacrolix/torrent/wasm', import.meta.url);
 const wasmExecUrl = new URL('@anacrolix/torrent/wasm_exec', import.meta.url);
+
+// The worker takes the WASM scheduler off the main thread so the UI
+// stays responsive while the Go runtime is busy. @fkn/lib stays on
+// main (it owns the iframe to the fkn-api page) and is proxied into
+// the worker via osra.
+const torrentWorker = new Worker(
+  new URL('@anacrolix/torrent/worker', import.meta.url),
+  { type: 'module' },
+);
+torrentWorker.addEventListener('error', (e) => {
+  // eslint-disable-next-line no-console
+  console.error('[worker] error:', e.message, e.filename, e.lineno);
+});
+torrentWorker.addEventListener('messageerror', (e) => {
+  // eslint-disable-next-line no-console
+  console.error('[worker] messageerror:', e);
+});
+// Dump worker log messages into a global ring buffer that the React
+// component can render — Chrome's read_console_messages plugin only
+// captures the main thread console, so I need them somewhere visible.
+const workerLogBuffer: string[] = [];
+(globalThis as { __workerLog?: string[] }).__workerLog = workerLogBuffer;
+const workerLogListeners: Array<() => void> = [];
+
+const pushLog = (...args: unknown[]): void => {
+  const line = `[${new Date().toISOString().slice(11, 19)}] ${args
+    .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+    .join(' ')}`;
+  workerLogBuffer.push(line);
+  if (workerLogBuffer.length > 200) workerLogBuffer.shift();
+  for (const cb of workerLogListeners) cb();
+};
+(globalThis as { __pushLog?: typeof pushLog }).__pushLog = pushLog;
+torrentWorker.addEventListener('message', (e) => {
+  if (e.data && typeof e.data === 'object' && e.data.__torrentWorkerLog) {
+    const line = `[${new Date().toISOString().slice(11, 19)}] ${e.data.args.map((a: unknown) =>
+      typeof a === 'string' ? a : JSON.stringify(a)
+    ).join(' ')}`;
+    workerLogBuffer.push(line);
+    if (workerLogBuffer.length > 200) workerLogBuffer.shift();
+    for (const cb of workerLogListeners) cb();
+    // eslint-disable-next-line no-console
+    console.log('[worker]', ...e.data.args);
+  }
+});
 
 const styles = {
   page: css`
@@ -129,23 +174,41 @@ export const App = () => {
   const [files, setFiles] = useState<TorrentFile[]>([]);
   const [stats, setStats] = useState<TorrentStats | null>(null);
   const [busy, setBusy] = useState(false);
+  const [, setLogTick] = useState(0);
+  useEffect(() => {
+    const cb = () => setLogTick((t) => t + 1);
+    workerLogListeners.push(cb);
+    return () => {
+      const i = workerLogListeners.indexOf(cb);
+      if (i >= 0) workerLogListeners.splice(i, 1);
+    };
+  }, []);
 
-  // Boot the WASM client once. @fkn/lib's `net` / `dgram` modules tunnel
-  // through WebTransport to the configured webvpn server.
+  // Boot the WASM client once. @fkn/lib's `net` / `dgram` tunnel through
+  // WebTransport to webvpn — but inside a Worker, so the Go scheduler
+  // and per-packet work stay off the main thread. `apiPromise` is the
+  // main-window-bound osra handle to the FKN iframe; osra deep-proxies
+  // it into the worker so Socket constructors there can call back
+  // through it transparently.
   useEffect(() => {
     (async () => {
       try {
+        pushLog('[main] calling createClient (worker mode)');
         setStatus({ kind: 'wasm-loading' });
         const cl = await createClient({
+          worker: torrentWorker,
           wasmUrl,
           wasmExecUrl,
           net,
           dgram,
+          apiPromise,
           storage: memoryStorage(),
         });
+        pushLog('[main] createClient returned, client id =', cl.id);
         setClient(cl);
         setStatus({ kind: 'ready' });
       } catch (err) {
+        pushLog('[main] init error:', (err as Error).message);
         console.error('[app] init error', err);
         setStatus({ kind: 'error', message: (err as Error).message });
       }
@@ -259,6 +322,26 @@ export const App = () => {
           </div>
         </div>
       )}
+
+      <div
+        css={css`
+          background: #111;
+          border: 1px solid #2d2d2d;
+          border-radius: 4px;
+          padding: 12px;
+          font-size: 11px;
+          line-height: 1.4;
+          max-height: 360px;
+          overflow: auto;
+          white-space: pre-wrap;
+          color: #888;
+        `}
+      >
+        <div style={{ color: '#666', marginBottom: 4 }}>worker log ({workerLogBuffer.length}):</div>
+        {workerLogBuffer.length === 0
+          ? '(no messages yet)'
+          : workerLogBuffer.slice(-100).join('\n')}
+      </div>
     </div>
   );
 };

@@ -73,6 +73,27 @@ export interface TorrentBridge {
 // --------------------------------------------------------------------------
 // Small helpers.
 
+// Forward debug messages from a worker context back to the main page.
+// In a dedicated worker `self.postMessage` posts to main; in any other
+// context (window, etc.) it's a no-op.
+const inDedicatedWorker = ((): boolean => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ctor = (globalThis as any).DedicatedWorkerGlobalScope;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return typeof ctor === 'function' && (globalThis as any) instanceof ctor;
+})();
+function workerSideLog(...args: unknown[]): void {
+  if (!inDedicatedWorker) return;
+  try {
+    (globalThis as { postMessage: (m: unknown) => void }).postMessage({
+      __torrentWorkerLog: true,
+      args,
+    });
+  } catch {
+    // Ignore — non-cloneable payload, etc.
+  }
+}
+
 function parseAddr(addr: string): { host: string; port: number } {
   const i = addr.lastIndexOf(':');
   if (i < 0) throw new Error('invalid address: ' + addr);
@@ -314,6 +335,7 @@ export function createBridge({ net, dgram, storage, onReady }: BridgeInputs): To
     async connSetWriteDeadline() {},
 
     async listenTcp(network, addr) {
+      workerSideLog('[bridge] listenTcp', network, addr);
       if (!net) return null;
       try {
         const server = net.createServer();
@@ -355,6 +377,7 @@ export function createBridge({ net, dgram, storage, onReady }: BridgeInputs): To
     },
 
     async packetListen(network, addr) {
+      workerSideLog('[bridge] packetListen', network, addr);
       const parsed = parseAddr(addr);
       const type = network === 'udp6' ? 'udp6' : 'udp4';
       const host = parsed.host || (type === 'udp6' ? '::' : '0.0.0.0');

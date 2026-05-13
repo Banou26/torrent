@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    },
     "./storage/memory": {
       "types": "./dist/storage/memory.d.ts",
       "import": "./dist/storage/memory.js"
@@ -34,6 +38,9 @@
     "clean": "rm -rf dist",
     "test": "node test/smoke.mjs"
   },
+  "dependencies": {
+    "osra": "^0.4.0"
+  },
   "peerDependencies": {
     "@fkn/lib": "*"
   },
@@ -43,6 +50,7 @@
     }
   },
   "devDependencies": {
+    "@fkn/lib": "file:../../../fkn/web/lib",
     "typescript": "^5.6.0"
   },
   "engines": {
