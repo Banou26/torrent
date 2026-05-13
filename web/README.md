@@ -144,20 +144,29 @@ plain Node API (`createConnection`, `createSocket`, `.on('data', ...)`,
 
 ## Transport coverage
 
-When @fkn/lib's `net` and `dgram` polyfills are used, every BitTorrent
-transport works the same as the native Go build:
+When @fkn/lib's `net` and `dgram` polyfills are used (or any
+Node-compatible substitute), every BitTorrent transport works the same
+as the native Go build. Each item below has an end-to-end test under
+`web/ts/test/`:
 
-- **Outbound TCP peers** — `net.createConnection` via the bridge.
-- **Inbound TCP peers** — `net.createServer` via the bridge.
-- **UDP trackers** — `cfg.TrackerListenPacket` is set to the bridge's
-  packet listener.
-- **uTP** — driven by the real `anacrolix/utp` Go implementation
-  (build tag `-tags disable_libutp`), running on top of a JS-backed
-  `net.PacketConn`. All framing happens in Go.
-- **DHT** — same UDP path as UDP trackers.
-- **HTTP trackers / webseeds** — `cfg.HTTPDialContext` and
-  `cfg.TrackerDialContext` go through the bridge's TCP dial, so HTTP
-  requests skip the browser `fetch` path and are not subject to CORS.
+| Transport | Used for | Verified |
+|-----------|----------|----------|
+| TCP (outbound) | peer-wire protocol, HTTP trackers, webseeds | `node test/verify.mjs tcp-only` — downloads + verifies real bytes from Sintel |
+| TCP (inbound)  | accepting incoming peers | bridge binds via `net.createServer`; falls back gracefully when the host can't accept |
+| uTP            | peer-wire protocol over UDP | `node test/verify.mjs utp-only` — pure-Go `anacrolix/utp` on top of JS-backed `net.PacketConn`, downloads + verifies real bytes |
+| UDP trackers   | tracker announces | exercised by the default `smoke.mjs` run (Sintel uses only UDP trackers) |
+| HTTP trackers  | tracker announces | `node test/verify.mjs http-trk` — Debian magnet (sole tracker is `http://bttracker.debian.org:6969/announce`) — got 38 peers + 3 connected seeders |
+| DHT            | peer discovery | same UDP path as UDP trackers |
+| DNS            | resolving tracker hostnames | custom `net.DefaultResolver.Dial` runs DoUDP through the bridge to public resolvers (Cloudflare/Google) |
+
+Notes:
+
+- HTTP traffic goes through `cfg.HTTPDialContext` / `cfg.TrackerDialContext`,
+  i.e. raw TCP via the bridge — not the browser `fetch` path — so CORS
+  doesn't apply.
+- uTP framing happens entirely in Go (the bridge just gives it a UDP
+  socket); the build uses `-tags disable_libutp` to select the pure-Go
+  implementation instead of the CGO `go-libutp`.
 
 ## Limitations
 
