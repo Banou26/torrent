@@ -52,7 +52,13 @@ type tcpSocket struct {
 func (t *tcpSocket) DialerNetwork() string { return t.network }
 
 func (t *tcpSocket) Dial(ctx context.Context, addr string) (net.Conn, error) {
-	return DialJsConn(ctx, t.network, addr)
+	// Avoid the Go typed-nil interface trap: never return a non-nil
+	// net.Conn interface value wrapping a nil *JsConn pointer.
+	c, err := DialJsConn(ctx, t.network, addr)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 var _ dialer.T = (*tcpSocket)(nil)

@@ -5,6 +5,7 @@ package jsbridge
 import (
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"syscall/js"
 )
@@ -29,13 +30,22 @@ var _ net.Listener = (*JsListener)(nil)
 
 // listenTcpBridge opens a JS-backed TCP listener. The returned object has
 // shape { id, localAddr }.
+//
+// When the host returns null (refusing or failing to bind), we surface an
+// *os.SyscallError that matches the upstream library's isUnsupportedNetworkError
+// pattern, so the library skips this network family and continues with the
+// others. This is how we degrade gracefully on, e.g., a tcp6 EADDRINUSE that
+// the host's TCP server can't recover from.
 func listenTcpBridge(network, address string) (*JsListener, error) {
 	v, err := callPromise("listenTcp", network, address)
 	if err != nil {
 		return nil, err
 	}
 	if v.IsUndefined() || v.IsNull() {
-		return nil, errors.New("jsbridge: host returned no listener (incoming TCP unsupported?)")
+		return nil, &os.SyscallError{
+			Syscall: "bind",
+			Err:     errors.New("cannot assign requested address"),
+		}
 	}
 	id := v.Get("id").Int()
 	local := v.Get("localAddr").String()

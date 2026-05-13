@@ -31,7 +31,8 @@
     "build:ts": "tsc -p tsconfig.json",
     "build": "npm run build:wasm && npm run build:ts && cp ../dist/torrent.wasm ../dist/wasm_exec.js dist/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "node test/smoke.mjs"
   },
   "peerDependencies": {
     "@fkn/lib": "*"
@@ -40,6 +41,9 @@
     "@fkn/lib": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
   },
   "engines": {
     "node": ">=18"

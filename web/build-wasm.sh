@@ -28,7 +28,7 @@ fi
 echo "==> building torrent.wasm"
 (
     cd "$repo_root"
-    GOOS=js GOARCH=wasm go build \
+    CGO_ENABLED=0 GOOS=js GOARCH=wasm go build \
         -ldflags="-s -w" \
         -trimpath \
         -tags "disable_libutp" \
@@ -37,6 +37,6 @@ echo "==> building torrent.wasm"
 )
 
 echo "==> copying wasm_exec.js"
-cp "$wasm_exec" "$out_dir/wasm_exec.js"
+install -m 0644 "$wasm_exec" "$out_dir/wasm_exec.js"
 
 echo "==> built: $out_dir/torrent.wasm ($(du -h "$out_dir/torrent.wasm" | awk '{print $1}'))"

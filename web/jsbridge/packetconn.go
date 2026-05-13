@@ -3,7 +3,10 @@
 package jsbridge
 
 import (
+	"errors"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"syscall/js"
 	"time"
@@ -25,9 +28,21 @@ var _ net.PacketConn = (*JsPacketConn)(nil)
 
 // ListenPacketJS opens a UDP socket through the host. The host returns
 // { id, localAddr } where localAddr is "host:port".
+//
+// If the host rejects with an EADDRINUSE / EADDRNOTAVAIL-style failure
+// (typically on the second IP family for a port that the first family
+// already owns dual-stack), we surface an *os.SyscallError that matches
+// the upstream library's isUnsupportedNetworkError pattern so it skips
+// the family and continues.
 func ListenPacketJS(network, address string) (*JsPacketConn, error) {
 	v, err := callPromise("packetListen", network, address)
 	if err != nil {
+		if looksLikeUnsupportedAddr(err.Error()) {
+			return nil, &os.SyscallError{
+				Syscall: "bind",
+				Err:     errors.New("cannot assign requested address"),
+			}
+		}
 		return nil, err
 	}
 	id := v.Get("id").Int()
@@ -38,6 +53,15 @@ func ListenPacketJS(network, address string) (*JsPacketConn, error) {
 		local:   stringAddr{network: network, address: local},
 		closed:  make(chan struct{}),
 	}, nil
+}
+
+func looksLikeUnsupportedAddr(msg string) bool {
+	for _, marker := range []string{"EADDRINUSE", "EADDRNOTAVAIL", "EAFNOSUPPORT"} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // ReadFrom blocks waiting for the next inbound datagram. The host

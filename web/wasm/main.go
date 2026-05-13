@@ -29,6 +29,7 @@ import (
 
 func main() {
 	jsbridge.Install()
+	installResolver()
 
 	exports := js.Global().Get("Object").New()
 	register := func(name string, fn func(this js.Value, args []js.Value) any) {
@@ -173,6 +174,12 @@ func jsNewClient(this js.Value, args []js.Value) any {
 		cfg.HTTPDialContext = dial
 		cfg.TrackerDialContext = dial
 		cfg.TrackerListenPacket = listenPacket
+
+		// WebRTC depends on browser APIs that the bridge doesn't proxy
+		// (and wouldn't make sense to: pion talks directly to the host's
+		// RTCPeerConnection). Disable it by default; callers can opt back
+		// in if they bind something up host-side.
+		cfg.DisableWebtorrent = true
 
 		// Map a small subset of options.
 		if opts.Type() == js.TypeObject {

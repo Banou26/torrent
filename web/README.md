@@ -133,6 +133,11 @@ import * as fkn from '@fkn/lib';
 await createClient({ /* ... */ net: fkn.net, dgram: fkn.dgram });
 ```
 
+The same setup also works under Node using the built-in `node:net` and
+`node:dgram` modules — see `web/ts/test/smoke.mjs` for the end-to-end
+test that fetches the Sintel torrent metadata over real public trackers
+and DHT, with the file list confirmed.
+
 Anything with the same shape works — the bridge drives them with the
 plain Node API (`createConnection`, `createSocket`, `.on('data', ...)`,
 `.send(...)`, etc.). No additional wrapper layer is needed.

@@ -1,3 +1,4 @@
 dist/
 ts/dist/
 ts/node_modules/
+ts/package-lock.json

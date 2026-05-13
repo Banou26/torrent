@@ -313,15 +313,22 @@ export function createBridge({ net, dgram, storage, onReady }: BridgeInputs): To
     async connSetReadDeadline() {},
     async connSetWriteDeadline() {},
 
-    async listenTcp(_network, addr) {
+    async listenTcp(network, addr) {
       if (!net) return null;
       try {
         const server = net.createServer();
-        const { host, port } = parseAddr(addr);
+        const parsed = parseAddr(addr);
+        // Node's `server.listen(port, '')` binds both IPv4 and IPv6 on a
+        // dual-stack OS, so when the torrent library asks for tcp4 and
+        // tcp6 on the same port they collide. Bind per-family when the
+        // caller didn't pin a host.
+        const host =
+          parsed.host ||
+          (network === 'tcp6' ? '::' : network === 'tcp4' ? '0.0.0.0' : '');
         await new Promise<void>((resolve, reject) => {
           server.on('listening', () => resolve());
           server.on('error', (e) => reject(e));
-          server.listen(port, host);
+          server.listen(parsed.port, host);
         });
         const a = server.address();
         const local =
@@ -348,13 +355,14 @@ export function createBridge({ net, dgram, storage, onReady }: BridgeInputs): To
     },
 
     async packetListen(network, addr) {
-      const { host, port } = parseAddr(addr);
+      const parsed = parseAddr(addr);
       const type = network === 'udp6' ? 'udp6' : 'udp4';
+      const host = parsed.host || (type === 'udp6' ? '::' : '0.0.0.0');
       const sock = requireDgram().createSocket(type);
       await new Promise<void>((resolve, reject) => {
         sock.on('listening', () => resolve());
         sock.on('error', (e) => reject(e));
-        sock.bind(port, host);
+        sock.bind(parsed.port, host);
       });
       const a = sock.address();
       const local = formatAddr(a.address, a.port);
