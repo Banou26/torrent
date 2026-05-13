@@ -42,11 +42,6 @@ export interface TorrentBridge {
   packetSetReadDeadline(id: number, ms: number): Promise<void>;
   packetSetWriteDeadline(id: number, ms: number): Promise<void>;
 
-  // uTP: tunnels through the host's packet socket. Default: outbound uTP
-  // dials transparently fall back to plain TCP; inbound is unsupported.
-  utpAccept(packetId: number): Promise<{ id: number; localAddr: string; remoteAddr: string } | null>;
-  utpDial(packetId: number, addr: string): Promise<{ id: number; localAddr: string; remoteAddr: string }>;
-
   // Storage.
   storageOpen(
     infoHash: string,
@@ -385,26 +380,6 @@ export function createBridge({ net, dgram, storage, onReady }: BridgeInputs): To
     async packetSetDeadline() {},
     async packetSetReadDeadline() {},
     async packetSetWriteDeadline() {},
-
-    async utpAccept() {
-      // Inbound uTP isn't implemented in the default bridge. A host may
-      // override this method post-construction.
-      return null;
-    },
-    async utpDial(_packetId, addr) {
-      // Outbound uTP falls back to plain TCP if `net` is available.
-      const { host, port } = parseAddr(addr);
-      const sock = requireNet().createConnection({ host, port });
-      await new Promise<void>((resolve, reject) => {
-        sock.on('connect', () => resolve());
-        sock.on('error', (e) => reject(e));
-      });
-      const local = formatAddr(sock.localAddress, sock.localPort);
-      const remote = formatAddr(sock.remoteAddress ?? host, sock.remotePort ?? port);
-      const s = new StreamState(sock, local, remote);
-      const id = streams.put(s);
-      return streamHandle(s, id);
-    },
 
     async storageOpen(infoHash, name, pieceLength, numPieces) {
       const st = await storage.open({ infoHash, name, pieceLength, numPieces });

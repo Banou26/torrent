@@ -9,6 +9,7 @@ import (
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/dialer"
+	"github.com/anacrolix/utp"
 )
 
 // Install wires the jsbridge implementations into the torrent package.
@@ -29,7 +30,16 @@ func Install() {
 		if err != nil {
 			return nil, err
 		}
-		return &utpSocket{pc: pc, network: network}, nil
+		// Drive real uTP on top of the JS-backed UDP socket. anacrolix/utp's
+		// Socket implements Accept/Dial/Addr/Close — we only need to wrap it
+		// to satisfy torrent.Socket (which expects DialerNetwork() and a
+		// context-aware Dial signature).
+		us, err := utp.NewSocketFromPacketConn(pc)
+		if err != nil {
+			_ = pc.Close()
+			return nil, err
+		}
+		return &utpSocket{us: us, network: network}, nil
 	}
 }
 
@@ -45,43 +55,23 @@ func (t *tcpSocket) Dial(ctx context.Context, addr string) (net.Conn, error) {
 	return DialJsConn(ctx, t.network, addr)
 }
 
-// Make sure tcpSocket satisfies dialer.T (Dial + DialerNetwork).
 var _ dialer.T = (*tcpSocket)(nil)
 
-// utpSocket adapts a JsPacketConn to torrent.Socket. Outbound "uTP" dials
-// fall through to the bridge's dial method; the host is responsible for
-// running uTP semantics (or, more pragmatically, terminating the
-// underlying transport for us). For browser environments where real uTP
-// over UDP is impractical, the host may proxy these connections.
+// utpSocket wraps an anacrolix/utp.Socket to satisfy torrent.Socket.
+// The underlying transport is a JsPacketConn (UDP from @fkn/lib's
+// dgram polyfill). All uTP framing happens locally in Go.
 type utpSocket struct {
-	pc      *JsPacketConn
+	us      *utp.Socket
 	network string
 }
 
-func (u *utpSocket) Accept() (net.Conn, error) {
-	// Inbound uTP "Accept" is handled host-side. Block until the host
-	// returns a virtual connection, or returns null on closure.
-	v, err := callPromise("utpAccept", u.pc.id)
-	if err != nil {
-		return nil, err
-	}
-	if v.IsUndefined() || v.IsNull() {
-		return nil, net.ErrClosed
-	}
-	return newJsConnFromJS(u.network, v), nil
-}
-
-func (u *utpSocket) Addr() net.Addr        { return u.pc.LocalAddr() }
-func (u *utpSocket) DialerNetwork() string { return u.network }
+func (u *utpSocket) Accept() (net.Conn, error) { return u.us.Accept() }
+func (u *utpSocket) Addr() net.Addr            { return u.us.Addr() }
+func (u *utpSocket) Close() error              { return u.us.Close() }
+func (u *utpSocket) DialerNetwork() string     { return u.network }
 
 func (u *utpSocket) Dial(ctx context.Context, addr string) (net.Conn, error) {
-	v, err := callPromise("utpDial", u.pc.id, addr)
-	if err != nil {
-		return nil, err
-	}
-	return newJsConnFromJS(u.network, v), nil
+	return u.us.DialContext(ctx, u.network, addr)
 }
-
-func (u *utpSocket) Close() error { return u.pc.Close() }
 
 var _ dialer.T = (*utpSocket)(nil)

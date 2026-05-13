@@ -12,10 +12,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"sync"
 	"sync/atomic"
 	"syscall/js"
@@ -157,6 +159,20 @@ func jsNewClient(this js.Value, args []js.Value) any {
 		}
 		cfg := torrent.NewDefaultClientConfig()
 		cfg.DefaultStorage = jsbridge.NewStorage()
+
+		// Route HTTP and tracker traffic through the bridge so we avoid the
+		// browser fetch path (which is subject to CORS) and instead use raw
+		// TCP via @fkn/lib's `net` polyfill. UDP trackers + DHT use the same
+		// bridge through ListenPacket.
+		dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return jsbridge.DialJsConn(ctx, network, addr)
+		}
+		listenPacket := func(network, addr string) (net.PacketConn, error) {
+			return jsbridge.ListenPacketJS(network, addr)
+		}
+		cfg.HTTPDialContext = dial
+		cfg.TrackerDialContext = dial
+		cfg.TrackerListenPacket = listenPacket
 
 		// Map a small subset of options.
 		if opts.Type() == js.TypeObject {

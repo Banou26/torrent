@@ -137,36 +137,29 @@ Anything with the same shape works — the bridge drives them with the
 plain Node API (`createConnection`, `createSocket`, `.on('data', ...)`,
 `.send(...)`, etc.). No additional wrapper layer is needed.
 
-## uTP support
+## Transport coverage
 
-uTP runs on top of the UDP packet socket the adapter supplies. The
-`anacrolix/utp` pure-Go implementation is used (we build with
-`-tags disable_libutp` to avoid the CGO variant). For real uTP semantics
-in the browser, the JS bridge tunnels inbound uTP `Accept()` and
-outbound `Dial()` through `utpAccept` / `utpDial`. The default JS
-implementations:
+When @fkn/lib's `net` and `dgram` polyfills are used, every BitTorrent
+transport works the same as the native Go build:
 
-- `utpAccept` returns `null` (no inbound uTP — fine for outbound-only
-  setups).
-- `utpDial` transparently falls back to a plain TCP dial.
+- **Outbound TCP peers** — `net.createConnection` via the bridge.
+- **Inbound TCP peers** — `net.createServer` via the bridge.
+- **UDP trackers** — `cfg.TrackerListenPacket` is set to the bridge's
+  packet listener.
+- **uTP** — driven by the real `anacrolix/utp` Go implementation
+  (build tag `-tags disable_libutp`), running on top of a JS-backed
+  `net.PacketConn`. All framing happens in Go.
+- **DHT** — same UDP path as UDP trackers.
+- **HTTP trackers / webseeds** — `cfg.HTTPDialContext` and
+  `cfg.TrackerDialContext` go through the bridge's TCP dial, so HTTP
+  requests skip the browser `fetch` path and are not subject to CORS.
 
-A host that wants real uTP can override these bridge methods after
-calling `createBridge()`.
+## Limitations
 
-## Limitations vs. native Go
-
-The browser environment imposes a few limitations that the WASM build
-cannot transparently work around:
-
-1. **Inbound TCP**: most browser hosts cannot accept inbound peer
-   connections. The library will run outbound-only.
-2. **Workers**: this build is single-threaded by request — all
-   bridge methods (including storage reads) run on the main thread.
-3. **HTTP trackers**: trackers without permissive CORS will fail; pass
-   `disableTrackers: true` and rely on DHT/PEX or use trackers you
-   control.
-4. **Filesystem access**: OPFS only — there is no equivalent of the Go
-   "file" backend that writes the original torrent layout to disk.
+1. **Workers**: this build is single-threaded by request — all bridge
+   methods (including storage reads) run on the main thread.
+2. **Filesystem layout**: OPFS only — there is no equivalent of the Go
+   "file" backend that writes the original directory layout to disk.
 
 ## Modifications to the upstream library
 
