@@ -42,7 +42,7 @@ func (s *Storage) OpenTorrent(
 	infoHash metainfo.Hash,
 ) (storage.TorrentImpl, error) {
 	// Send the raw metainfo "info" bytes so the host can decide where to
-	// stash data. Best-effort re-encode by walking metainfo.Info — but for
+	// stash data. Best-effort re-encode by walking metainfo.Info - but for
 	// the bridge we just need the hex hash and a couple of properties; the
 	// host can re-decode the spec if needed.
 	v, err := callPromise(

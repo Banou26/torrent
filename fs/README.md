@@ -8,8 +8,8 @@ modules:
 
 | Repo | FUSE library |
 |------|-------------|
-| [anacrolix/og-torrentfs](https://github.com/anacrolix/og-torrentfs) | [anacrolix/fuse](https://github.com/anacrolix/fuse) — supports macFUSE and fuse-t on macOS, fusermount on Linux |
-| [anacrolix/hanwen-torrentfs](https://github.com/anacrolix/hanwen-torrentfs) | [hanwen/go-fuse/v2](https://github.com/hanwen/go-fuse) — uses macFUSE socket protocol on macOS (incompatible with fuse-t) |
+| [anacrolix/og-torrentfs](https://github.com/anacrolix/og-torrentfs) | [anacrolix/fuse](https://github.com/anacrolix/fuse), which supports macFUSE and fuse-t on macOS, fusermount on Linux |
+| [anacrolix/hanwen-torrentfs](https://github.com/anacrolix/hanwen-torrentfs) | [hanwen/go-fuse/v2](https://github.com/hanwen/go-fuse), which uses macFUSE socket protocol on macOS (incompatible with fuse-t) |
 
 ## Changing this package
 

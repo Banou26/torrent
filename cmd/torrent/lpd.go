@@ -33,7 +33,7 @@ const (
 )
 
 func lpdCmd() bargle.Command {
-	cmd := bargle.Command{Desc: "Local Peer Discovery (BEP-14) tools — listen for or send LPD announcements without a full client"}
+	cmd := bargle.Command{Desc: "Local Peer Discovery (BEP-14) tools: listen for or send LPD announcements without a full client"}
 	cmd.Positionals = append(cmd.Positionals,
 		bargle.Subcommand{Name: "listen", Command: func() bargle.Command {
 			var args struct {

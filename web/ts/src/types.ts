@@ -43,7 +43,7 @@ export interface TorrentStats {
 // @fkn/lib exports `net` and `dgram` with the same shape as Node's
 // built-in modules, restricted to what this library actually uses. We
 // define the narrowest interface that lets the bridge drive them
-// directly — so any module with the same API (including the real Node
+// directly - so any module with the same API (including the real Node
 // modules) can be substituted.
 
 export interface NodeSocket {

@@ -4,8 +4,8 @@
 // single file inside that directory. A separate `.complete` zero-byte
 // file marks a piece as verified by the BitTorrent engine.
 //
-// This is intentionally simple — it does not interleave file layouts the
-// way the Go "file" backend does — because we run on the main thread
+// This is intentionally simple - it does not interleave file layouts the
+// way the Go "file" backend does - because we run on the main thread
 // without access to sync access handles. (Sync access handles, which
 // would let us back the torrent's exact on-disk layout efficiently, are
 // only available inside dedicated workers.)

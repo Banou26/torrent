@@ -90,7 +90,7 @@ function workerSideLog(...args: unknown[]): void {
       args,
     });
   } catch {
-    // Ignore — non-cloneable payload, etc.
+    // Ignore - non-cloneable payload, etc.
   }
 }
 

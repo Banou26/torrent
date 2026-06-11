@@ -1,6 +1,6 @@
 // Public TypeScript API for @anacrolix/torrent.
 //
-// Single-threaded mode (everything runs on the main thread — fine for
+// Single-threaded mode (everything runs on the main thread - fine for
 // small/synthetic torrents, but the Go WASM scheduler will compete with
 // the UI for the JS event loop):
 //
@@ -12,7 +12,7 @@
 //     net: fkn.net, dgram: fkn.dgram,
 //   });
 //
-// Worker mode (recommended for anything real — the WASM and its socket
+// Worker mode (recommended for anything real - the WASM and its socket
 // I/O move off the main thread; net/dgram modules and storage are
 // proxied to the worker via osra, so the same @fkn/lib instance keeps
 // the iframe-to-fkn-api connection on the main thread):
@@ -119,7 +119,7 @@ export interface CreateClientOptions extends ClientOptions, LoadOptions {
   /**
    * If provided, the WASM client runs inside this Worker. The library
    * uses @fkn/lib's `exposeApi({ transport: worker })` to re-expose the
-   * main thread's iframe-backed Resolvers over this Worker — the worker
+   * main thread's iframe-backed Resolvers over this Worker - the worker
    * then calls `connectApi() + createFkn()` to construct its own
    * net/dgram. The Go scheduler runs off the main thread; only the
    * actual webvpn syscalls cross back.

@@ -73,7 +73,7 @@ const stream = file.stream();
 const bytes = await file.read(0, 1 << 20);
 ```
 
-`net` and `dgram` are accepted as Node-compatible modules — they're
+`net` and `dgram` are accepted as Node-compatible modules: they're
 passed straight through to the bridge, which drives them with the same
 calls Node code would (`net.createConnection`, `dgram.createSocket`,
 etc.). Anything with that surface works: @fkn/lib, the real Node
@@ -119,10 +119,10 @@ Sockets, an in-page WebRTC relay, etc.
 
 `createClient` accepts two Node-compatible modules directly:
 
-- `net` — used for outbound TCP peer connections and (optionally) inbound
+- `net`: used for outbound TCP peer connections and (optionally) inbound
   listeners. Skipped when omitted (and `disableTCP` is set on the Go
   side automatically).
-- `dgram` — used for UDP packet sockets, which the DHT, UDP trackers,
+- `dgram`: used for UDP packet sockets, which the DHT, UDP trackers,
   and uTP all run on. Skipped when omitted (`disableDHT` and
   `disableUTP` are set automatically).
 
@@ -134,11 +134,11 @@ await createClient({ /* ... */ net: fkn.net, dgram: fkn.dgram });
 ```
 
 The same setup also works under Node using the built-in `node:net` and
-`node:dgram` modules — see `web/ts/test/smoke.mjs` for the end-to-end
+`node:dgram` modules; see `web/ts/test/smoke.mjs` for the end-to-end
 test that fetches the Sintel torrent metadata over real public trackers
 and DHT, with the file list confirmed.
 
-Anything with the same shape works — the bridge drives them with the
+Anything with the same shape works: the bridge drives them with the
 plain Node API (`createConnection`, `createSocket`, `.on('data', ...)`,
 `.send(...)`, etc.). No additional wrapper layer is needed.
 
@@ -151,18 +151,18 @@ as the native Go build. Each item below has an end-to-end test under
 
 | Transport | Used for | Verified |
 |-----------|----------|----------|
-| TCP (outbound) | peer-wire protocol, HTTP trackers, webseeds | `node test/verify.mjs tcp-only` — downloads + verifies real bytes from Sintel |
+| TCP (outbound) | peer-wire protocol, HTTP trackers, webseeds | `node test/verify.mjs tcp-only`: downloads + verifies real bytes from Sintel |
 | TCP (inbound)  | accepting incoming peers | bridge binds via `net.createServer`; falls back gracefully when the host can't accept |
-| uTP            | peer-wire protocol over UDP | `node test/verify.mjs utp-only` — pure-Go `anacrolix/utp` on top of JS-backed `net.PacketConn`, downloads + verifies real bytes |
+| uTP            | peer-wire protocol over UDP | `node test/verify.mjs utp-only`: pure-Go `anacrolix/utp` on top of JS-backed `net.PacketConn`, downloads + verifies real bytes |
 | UDP trackers   | tracker announces | exercised by the default `smoke.mjs` run (Sintel uses only UDP trackers) |
-| HTTP trackers  | tracker announces | `node test/verify.mjs http-trk` — Debian magnet (sole tracker is `http://bttracker.debian.org:6969/announce`) — got 38 peers + 3 connected seeders |
+| HTTP trackers  | tracker announces | `node test/verify.mjs http-trk`: Debian magnet (sole tracker is `http://bttracker.debian.org:6969/announce`); got 38 peers + 3 connected seeders |
 | DHT            | peer discovery | same UDP path as UDP trackers |
 | DNS            | resolving tracker hostnames | custom `net.DefaultResolver.Dial` runs DoUDP through the bridge to public resolvers (Cloudflare/Google) |
 
 Notes:
 
 - HTTP traffic goes through `cfg.HTTPDialContext` / `cfg.TrackerDialContext`,
-  i.e. raw TCP via the bridge — not the browser `fetch` path — so CORS
+  i.e. raw TCP via the bridge (not the browser `fetch` path), so CORS
   doesn't apply.
 - uTP framing happens entirely in Go (the bridge just gives it a UDP
   socket); the build uses `-tags disable_libutp` to select the pure-Go
@@ -170,9 +170,9 @@ Notes:
 
 ## Limitations
 
-1. **Workers**: this build is single-threaded by request — all bridge
+1. **Workers**: this build is single-threaded by request; all bridge
    methods (including storage reads) run on the main thread.
-2. **Filesystem layout**: OPFS only — there is no equivalent of the Go
+2. **Filesystem layout**: OPFS only; there is no equivalent of the Go
    "file" backend that writes the original directory layout to disk.
 
 ## Modifications to the upstream library
@@ -186,4 +186,4 @@ The bridge needs two hooks in the otherwise-untouched upstream code:
   paths. The WASM entry point (`web/wasm/main.go`) installs them via
   `jsbridge.Install()`.
 
-That's it — no other upstream Go files are touched.
+That's it: no other upstream Go files are touched.

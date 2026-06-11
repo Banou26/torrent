@@ -5,16 +5,16 @@
 // It is FUSE-library-agnostic: the core types (TorrentFS, Backend, Unmounter)
 // and helpers live here; concrete FUSE backends are in separate modules:
 //
-//   - github.com/anacrolix/og-torrentfs  – uses github.com/anacrolix/fuse
-//   - github.com/anacrolix/hanwen-torrentfs – uses github.com/hanwen/go-fuse/v2
+//   - github.com/anacrolix/og-torrentfs  - uses github.com/anacrolix/fuse
+//   - github.com/anacrolix/hanwen-torrentfs - uses github.com/hanwen/go-fuse/v2
 //
 // # Filesystem traversal
 //
 // traverse.go provides the directory-listing and lookup helpers used by every
 // backend:
 //
-//   - RootEntries / RootLookup  – enumerate/find top-level torrent entries
-//   - DirEntries / DirLookup    – enumerate/find entries inside a torrent directory
+//   - RootEntries / RootLookup  - enumerate/find top-level torrent entries
+//   - DirEntries / DirLookup    - enumerate/find entries inside a torrent directory
 //
 // # File reading
 //

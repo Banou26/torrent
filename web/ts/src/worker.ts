@@ -53,7 +53,7 @@ const log = (...args: unknown[]): void => {
       args: args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : a)),
     });
   } catch {
-    // Non-cloneable payload — drop.
+    // Non-cloneable payload - drop.
   }
 };
 const origConsoleLog = console.log.bind(console);

@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [preact({ jsxImportSource: '@emotion/react' }), nodePolyfills(polyfillOpts)],
   worker: {
     format: 'es',
-    // Workers need the same node polyfill set as the main thread — otherwise
+    // Workers need the same node polyfill set as the main thread - otherwise
     // @fkn/lib's `import { Stream } from 'stream'` etc. resolve to vite's
     // SPA fallback (HTML) and the worker silently aborts.
     plugins: () => [nodePolyfills(polyfillOpts)],

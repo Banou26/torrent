@@ -55,7 +55,7 @@ func testStreamSintel(t *testing.T, mount MountFunc) {
 
 	// Quick internet connectivity check: try a TCP connection to a well-known
 	// address. If it fails, the torrent cannot be downloaded and the test is
-	// pointless – skip early rather than hanging until the test deadline.
+	// pointless - skip early rather than hanging until the test deadline.
 	if !hasInternetConnectivity() {
 		t.Skip("no internet connectivity: skipping from-scratch Sintel download test")
 	}

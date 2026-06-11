@@ -43,7 +43,7 @@ cookie: name=value
 }
 
 // setupTestLPD installs a mock lpdServer on cl. The conn4 has no real
-// multicast sockets — tests drive the receive path synchronously via
+// multicast sockets - tests drive the receive path synchronously via
 // injectAnnounce, so behavior doesn't depend on the host OS delivering
 // multicast loopback. Replaces turning on real LPD in the client config.
 func setupTestLPD(cl *Client) {
@@ -216,7 +216,7 @@ func TestReceiverMalformedMessages(t *testing.T) {
 
 	from := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 6881}
 	msgs := []string{
-		// Wrong HTTP method — should be BT-SEARCH.
+		// Wrong HTTP method - should be BT-SEARCH.
 		"GET * HTTP/1.1\r\nHost: 239.192.152.143:6771\r\nPort: 9999\r\nInfohash: AABBCCDD1122334455667788AABBCCDD11223344\r\n\r\n\r\n",
 		// Missing Infohash header.
 		"BT-SEARCH * HTTP/1.1\r\nHost: 239.192.152.143:6771\r\nPort: 9999\r\n\r\n\r\n",

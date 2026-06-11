@@ -4,9 +4,9 @@
 //
 // Run: node test/verify.mjs <scenario>
 //
-//   tcp-only   — disable uTP, prove peers connect + bytes flow over TCP
-//   utp-only   — disable TCP, prove peers connect + bytes flow over uTP
-//   http-trk   — use a torrent with an HTTP tracker, prove the announce
+//   tcp-only   - disable uTP, prove peers connect + bytes flow over TCP
+//   utp-only   - disable TCP, prove peers connect + bytes flow over uTP
+//   http-trk   - use a torrent with an HTTP tracker, prove the announce
 //                roundtrips through the bridge (the Debian torrent ships
 //                http://bttracker.debian.org:6969/announce).
 
@@ -37,7 +37,7 @@ globalThis.fetch = async (url) => {
   return origFetch(url);
 };
 
-// Sintel — well-seeded, ~130 MB, used by webtorrent demos.
+// Sintel - well-seeded, ~130 MB, used by webtorrent demos.
 const sintel =
   'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10' +
   '&dn=Sintel' +
@@ -47,7 +47,7 @@ const sintel =
   '&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337' +
   '&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969';
 
-// Debian 13.4 netinst — its only tracker is the HTTP one at
+// Debian 13.4 netinst - its only tracker is the HTTP one at
 // bttracker.debian.org, so a successful announce proves the HTTP
 // tracker path through the bridge works.
 const debianMagnet =
@@ -74,7 +74,7 @@ async function runScenario(scenario) {
       magnet = debianMagnet;
       opts.disableDHT = true;
       opts.disablePEX = true;
-      // Don't try to download — just verify the HTTP announce roundtrip.
+      // Don't try to download - just verify the HTTP announce roundtrip.
       downloadBytes = 0;
       break;
     default:
@@ -95,7 +95,7 @@ async function runScenario(scenario) {
   const t = await client.addMagnet(magnet);
   console.log('magnet added:', t.infoHash);
 
-  // Wait for info (long timeout — TCP-only on some networks is slow).
+  // Wait for info (long timeout - TCP-only on some networks is slow).
   const info = await Promise.race([
     t.gotInfo(),
     new Promise((_, reject) =>

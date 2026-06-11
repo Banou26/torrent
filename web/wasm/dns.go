@@ -27,13 +27,13 @@ var defaultResolvers = []string{
 //
 // We dial a virtual "connected" PacketConn that wraps a JsPacketConn and
 // pins the remote address to a public resolver. The standard library's
-// resolver issues a UDP query and reads back a single response — that
+// resolver issues a UDP query and reads back a single response - that
 // fits the connectedPacketConn semantics perfectly.
 func installResolver() {
 	net.DefaultResolver.PreferGo = true
 	net.DefaultResolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 		// Ignore `address` (which Go fills from /etc/resolv.conf and on
-		// js/wasm is whatever the runtime guesses — typically `[::1]:53`).
+		// js/wasm is whatever the runtime guesses - typically `[::1]:53`).
 		// Use our hard-coded public resolvers instead.
 		isUDP := strings.HasPrefix(network, "udp")
 		fam := "udp4"
@@ -87,7 +87,7 @@ type stringErr string
 func (s stringErr) Error() string { return string(s) }
 
 // connectedPacketConn wraps a net.PacketConn with a pinned remote
-// address. It satisfies *both* net.Conn AND net.PacketConn — Go's DNS
+// address. It satisfies *both* net.Conn AND net.PacketConn - Go's DNS
 // resolver type-asserts on net.PacketConn to choose UDP semantics
 // (raw datagram exchange, no 2-byte length prefix), so we must expose
 // both surfaces.

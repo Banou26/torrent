@@ -10,7 +10,7 @@ import (
 
 // Tests that modifying the table from another goroutine during iteration is detected. The goroutine
 // completes the modification before the next version check, so the check panics rather than the
-// race detector firing — but running with -race would also catch unsynchronized access.
+// race detector firing - but running with -race would also catch unsynchronized access.
 func TestConcurrentModificationDetected(t *testing.T) {
 	var a Table[int]
 	a.Init(cmp.Compare)

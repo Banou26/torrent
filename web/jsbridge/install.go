@@ -31,7 +31,7 @@ func Install() {
 			return nil, err
 		}
 		// Drive real uTP on top of the JS-backed UDP socket. anacrolix/utp's
-		// Socket implements Accept/Dial/Addr/Close — we only need to wrap it
+		// Socket implements Accept/Dial/Addr/Close - we only need to wrap it
 		// to satisfy torrent.Socket (which expects DialerNetwork() and a
 		// context-aware Dial signature).
 		us, err := utp.NewSocketFromPacketConn(pc)

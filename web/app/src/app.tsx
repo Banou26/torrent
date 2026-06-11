@@ -35,7 +35,7 @@ torrentWorker.addEventListener('messageerror', (e) => {
   console.error('[worker] messageerror:', e);
 });
 // Dump worker log messages into a global ring buffer that the React
-// component can render — Chrome's read_console_messages plugin only
+// component can render - Chrome's read_console_messages plugin only
 // captures the main thread console, so I need them somewhere visible.
 const workerLogBuffer: string[] = [];
 (globalThis as { __workerLog?: string[] }).__workerLog = workerLogBuffer;
@@ -263,7 +263,7 @@ export const App = () => {
 
   return (
     <div css={styles.page}>
-      <h1 css={styles.header}>@anacrolix/torrent — browser demo</h1>
+      <h1 css={styles.header}>@anacrolix/torrent: browser demo</h1>
       <div css={[styles.status, status.kind === 'error' && styles.err]}>{statusLabel}</div>
 
       <div css={styles.row}>
